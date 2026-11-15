@@ -1,4 +1,3 @@
-
 name: Build Vinyl Recognition APK
 
 on:
@@ -15,7 +14,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Extract Android project
+      - name: Extract project
         run: |
           unzip -q VinylRecognition-Android-project.zip -d /tmp/vinyl
           cp -a /tmp/vinyl/VinylRecognition/. .
@@ -31,7 +30,7 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Install Android SDK
+      - name: Install SDK
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
       - name: Build APK
@@ -41,4 +40,3 @@ jobs:
         with:
           name: Vinyl-Recognition-APK
           path: app/build/outputs/apk/debug/app-debug.apk
-          
