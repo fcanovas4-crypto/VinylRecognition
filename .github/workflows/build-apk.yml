@@ -16,42 +16,34 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      - name: Extract project
+      - name: Extract Android project
         run: |
-          unzip -q VinylRecognition-Android-project.zip -d /tmp/vinyl
-          echo "CONTENIDO DEL ZIP:"
-          find /tmp/vinyl -maxdepth 3 -type f | head -100
-          echo "BUSCANDO ARCHIVOS GRADLE:"
-          find /tmp/vinyl \( -name gradlew -o -name settings.gradle -o -name settings.gradle.kts \)
+          unzip -q VinylRecognition-Android-project.zip -d project
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Gradle
+      - name: Install Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
 
       - name: Build APK
         run: |
-          find /tmp/vinyl -name gradlew -type f
-          GRADLEW=$(find /tmp/vinyl -name gradlew -type f | head -1)
-          if [ -z "$GRADLEW" ]; then
-            echo "ERROR: No se encuentra gradlew en el ZIP"
-            exit 1
-          fi
-          cd "$(dirname "$GRADLEW")"
-          chmod +x gradlew
-          ./gradlew assembleDebug
+          cd project
+          gradle assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Vinyl-Recognition-APK
-          path: /tmp/vinyl/**/build/outputs/apk/debug/*.apk
+          path: project/app/build/outputs/apk/debug/app-debug.apk
+
           
           
           
