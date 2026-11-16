@@ -68,6 +68,25 @@ jobs:
           print("Configuración Java y Kotlin 17 aplicada")
           PY
 
+                    python3 - "$APP_FILE" <<'PY'
+          from pathlib import Path
+          import sys
+
+          p = Path(sys.argv[1])
+          s = p.read_text()
+
+          if 'androidx.core:core-ktx' not in s:
+              s += '''
+
+          dependencies {
+              implementation("androidx.core:core-ktx:1.15.0")
+              implementation("androidx.activity:activity-ktx:1.10.0")
+          }
+          '''
+              p.write_text(s)
+          print("Dependencias AndroidX añadidas")
+          PY
+
           gradle -p "$PROJECT_DIR" assembleDebug
           
           
