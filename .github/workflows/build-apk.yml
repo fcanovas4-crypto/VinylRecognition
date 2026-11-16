@@ -34,19 +34,42 @@ jobs:
           gradle-version: '8.9'
 
       
+      
       - name: Build APK
         run: |
-          echo "BUSCANDO EL PROYECTO GRADLE"
-          find project -type f \( -name settings.gradle -o -name settings.gradle.kts \)
           SETTINGS=$(find project -type f \( -name settings.gradle -o -name settings.gradle.kts \) | head -1)
-          if [ -z "$SETTINGS" ]; then
-            echo "ERROR: No se encuentra settings.gradle"
-            find project -maxdepth 4 -type f
-            exit 1
-          fi
           PROJECT_DIR=$(dirname "$SETTINGS")
-          echo "Proyecto encontrado en: $PROJECT_DIR"
+          APP_FILE="$PROJECT_DIR/app/build.gradle.kts"
+
+          python3 - "$APP_FILE" <<'PY'
+          from pathlib import Path
+          import sys
+
+          p = Path(sys.argv[1])
+          s = p.read_text()
+
+          if 'jvmTarget = "17"' not in s:
+              pos = s.rfind("\n}")
+              if pos < 0:
+                  raise SystemExit("No se encuentra el bloque android")
+              s = s[:pos] + """
+          
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+          """ + s[pos:]
+              p.write_text(s)
+
+          print("Configuración Java y Kotlin 17 aplicada")
+          PY
+
           gradle -p "$PROJECT_DIR" assembleDebug
+          
           
 
       - name: Upload APK
