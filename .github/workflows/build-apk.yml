@@ -201,7 +201,7 @@ jobs:
           '''
 
           activity.write_text(kotlin)
-                  gradle_file = root / "app/build.gradle.kts"
+          gradle_file = root / "app/build.gradle.kts"
           gradle_file = root / "app/build.gradle.kts"
           g = gradle_file.read_text()
 
