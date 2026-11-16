@@ -203,7 +203,8 @@ jobs:
           activity.write_text(kotlin)
           gradle_file = root / "app/build.gradle.kts"
           g = gradle_file.read_text()
-                    
+           g += '\ndependencies {\n    implementation("androidx.activity:activity-ktx:1.10.0")\n    implementation("androidx.core:core-ktx:1.15.0")\n}\n'
+          gradle_file.write_text(g)         
               g += '\ndependencies {\n    implementation("androidx.activity:activity-ktx:1.10.0")\n    implementation("androidx.core:core-ktx:1.15.0")\n}\n'
 
           g += """
