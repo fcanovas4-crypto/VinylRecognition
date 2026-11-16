@@ -35,59 +35,177 @@ jobs:
 
       
       
+    
       - name: Build APK
         run: |
           SETTINGS=$(find project -type f \( -name settings.gradle -o -name settings.gradle.kts \) | head -1)
           PROJECT_DIR=$(dirname "$SETTINGS")
-          APP_FILE="$PROJECT_DIR/app/build.gradle.kts"
 
-          python3 - "$APP_FILE" <<'PY'
+          python3 - "$PROJECT_DIR" <<'PY'
           from pathlib import Path
           import sys
 
-          p = Path(sys.argv[1])
-          s = p.read_text()
+          root = Path(sys.argv[1])
 
-          if 'jvmTarget = "17"' not in s:
-              pos = s.rfind("\n}")
-              if pos < 0:
-                  raise SystemExit("No se encuentra el bloque android")
-              s = s[:pos] + """
-          
-              compileOptions {
-                  sourceCompatibility = JavaVersion.VERSION_17
-                  targetCompatibility = JavaVersion.VERSION_17
+          manifest = root / "app/src/main/AndroidManifest.xml"
+          if not manifest.exists():
+              raise SystemExit("No se encuentra AndroidManifest.xml")
+
+          s = manifest.read_text()
+
+          if 'android.permission.CAMERA' not in s:
+              s = s.replace(
+                  '<uses-permission android:name="android.permission.INTERNET" />',
+                  '<uses-permission android:name="android.permission.INTERNET" />\n    <uses-permission android:name="android.permission.CAMERA" />'
+              )
+
+          if 'android.hardware.camera' not in s:
+              s = s.replace(
+                  '<application',
+                  '<uses-feature android:name="android.hardware.camera" android:required="false" />\n    <application'
+              )
+
+          manifest.write_text(s)
+
+          activity = root / "app/src/main/java/com/vinylrecognition/app/MainActivity.kt"
+          if not activity.exists():
+              raise SystemExit("No se encuentra MainActivity.kt")
+
+          kotlin = '''package com.vinylrecognition.app
+
+          import android.Manifest
+          import android.annotation.SuppressLint
+          import android.content.pm.PackageManager
+          import android.os.Bundle
+          import android.view.View
+          import android.webkit.PermissionRequest
+          import android.webkit.WebChromeClient
+          import android.webkit.WebResourceRequest
+          import android.webkit.WebView
+          import android.webkit.WebViewClient
+          import android.widget.Toast
+          import androidx.activity.ComponentActivity
+          import androidx.activity.result.contract.ActivityResultContracts
+          import androidx.core.content.ContextCompat
+
+          class MainActivity : ComponentActivity() {
+              private lateinit var webView: WebView
+              private var pendingWebPermission: PermissionRequest? = null
+              private val appUrl = "https://vinyl-recognition-mu-bcnb.bolt.host"
+              private val appHost = "vinyl-recognition-mu-bcnb.bolt.host"
+
+              private val mediaPermissions = registerForActivityResult(
+                  ActivityResultContracts.RequestMultiplePermissions()
+              ) { results ->
+                  val request = pendingWebPermission
+                  pendingWebPermission = null
+
+                  if (request != null) {
+                      val granted = request.resources.all { resource ->
+                          when (resource) {
+                              PermissionRequest.RESOURCE_AUDIO_CAPTURE ->
+                                  results[Manifest.permission.RECORD_AUDIO]
+                                      ?: (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
+                              PermissionRequest.RESOURCE_VIDEO_CAPTURE ->
+                                  results[Manifest.permission.CAMERA]
+                                      ?: (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
+                              else -> false
+                          }
+                      }
+
+                      if (granted) request.grant(request.resources)
+                      else request.deny()
+                  }
               }
 
-              kotlinOptions {
-                  jvmTarget = "17"
+              @SuppressLint("SetJavaScriptEnabled")
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+
+                  window.decorView.systemUiVisibility = (
+                      View.SYSTEM_UI_FLAG_FULLSCREEN or
+                      View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                      View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+                      View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+                      View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+                      View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                  )
+
+                  webView = WebView(this)
+                  setContentView(webView)
+                  webView.settings.javaScriptEnabled = true
+                  webView.settings.domStorageEnabled = true
+                  webView.settings.mediaPlaybackRequiresUserGesture = false
+
+                  webView.webViewClient = object : WebViewClient() {
+                      override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                          return request.url.scheme != "https" || request.url.host != appHost
+                      }
+                  }
+
+                  webView.webChromeClient = object : WebChromeClient() {
+                      override fun onPermissionRequest(request: PermissionRequest) {
+                          runOnUiThread {
+                              if (request.origin.host != appHost || request.origin.scheme != "https") {
+                                  request.deny()
+                                  return@runOnUiThread
+                              }
+
+                              val permissions = mutableListOf<String>()
+
+                              if (PermissionRequest.RESOURCE_AUDIO_CAPTURE in request.resources)
+                                  permissions.add(Manifest.permission.RECORD_AUDIO)
+
+                              if (PermissionRequest.RESOURCE_VIDEO_CAPTURE in request.resources)
+                                  permissions.add(Manifest.permission.CAMERA)
+
+                              if (permissions.isEmpty()) {
+                                  request.deny()
+                                  return@runOnUiThread
+                              }
+
+                              val missing = permissions.filter {
+                                  ContextCompat.checkSelfPermission(this@MainActivity, it) != PackageManager.PERMISSION_GRANTED
+                              }
+
+                              if (missing.isEmpty()) {
+                                  request.grant(request.resources)
+                              } else {
+                                  pendingWebPermission = request
+                                  mediaPermissions.launch(missing.toTypedArray())
+                              }
+                          }
+                      }
+                  }
+
+                  if (savedInstanceState == null) webView.loadUrl(appUrl)
+                  else webView.restoreState(savedInstanceState)
               }
-          """ + s[pos:]
-              p.write_text(s)
 
-          print("Configuración Java y Kotlin 17 aplicada")
-          PY
+              override fun onSaveInstanceState(outState: Bundle) {
+                  webView.saveState(outState)
+                  super.onSaveInstanceState(outState)
+              }
 
-                    python3 - "$APP_FILE" <<'PY'
-          from pathlib import Path
-          import sys
+              @Deprecated("Deprecated in Android API")
+              override fun onBackPressed() {
+                  if (::webView.isInitialized && webView.canGoBack()) webView.goBack()
+                  else super.onBackPressed()
+              }
 
-          p = Path(sys.argv[1])
-          s = p.read_text()
-
-          if 'androidx.core:core-ktx' not in s:
-              s += '''
-
-          dependencies {
-              implementation("androidx.core:core-ktx:1.15.0")
-              implementation("androidx.activity:activity-ktx:1.10.0")
+              override fun onDestroy() {
+                  if (::webView.isInitialized) webView.destroy()
+                  super.onDestroy()
+              }
           }
           '''
-              p.write_text(s)
-          print("Dependencias AndroidX añadidas")
+
+          activity.write_text(kotlin)
+          print("Permiso y gestión de cámara actualizados")
           PY
 
           gradle -p "$PROJECT_DIR" assembleDebug
+          
           
           
 
