@@ -71,7 +71,7 @@ jobs:
           if not activity.exists():
               raise SystemExit("No se encuentra MainActivity.kt")
 
-              kotlin = '''
+          kotlin = '''
                 
            package com.vinylrecognition.app
 
