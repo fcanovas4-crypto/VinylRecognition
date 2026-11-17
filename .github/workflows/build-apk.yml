@@ -71,133 +71,214 @@ jobs:
           if not activity.exists():
               raise SystemExit("No se encuentra MainActivity.kt")
 
-          kotlin = '''package com.vinylrecognition.app
+          kotlin = '''
+                
+           package com.vinylrecognition.app
 
-          import android.Manifest
-          import android.annotation.SuppressLint
-          import android.content.pm.PackageManager
-          import android.os.Bundle
-          import android.view.View
-          import android.webkit.PermissionRequest
-          import android.webkit.WebChromeClient
-          import android.webkit.WebResourceRequest
-          import android.webkit.WebView
-          import android.webkit.WebViewClient
-          import android.widget.Toast
-          import androidx.activity.ComponentActivity
-          import androidx.activity.result.contract.ActivityResultContracts
-          import androidx.core.content.ContextCompat
+            import android.Manifest
+            import android.annotation.SuppressLint
+            import android.app.Activity
+            import android.content.ContentValues
+            import android.content.Intent
+            import android.content.pm.PackageManager
+            import android.net.Uri
+            import android.os.Bundle
+            import android.provider.MediaStore
+            import android.view.View
+            import android.webkit.PermissionRequest
+            import android.webkit.ValueCallback
+            import android.webkit.WebChromeClient
+            import android.webkit.WebResourceRequest
+            import android.webkit.WebView
+            import android.webkit.WebViewClient
+            import androidx.activity.ComponentActivity
+            import androidx.activity.result.contract.ActivityResultContracts
+            import androidx.core.content.ContextCompat
 
-          class MainActivity : ComponentActivity() {
-              private lateinit var webView: WebView
-              private var pendingWebPermission: PermissionRequest? = null
-              private val appUrl = "https://vinyl-recognition-mu-bcnb.bolt.host"
-              private val appHost = "vinyl-recognition-mu-bcnb.bolt.host"
+            class MainActivity : ComponentActivity() {
 
-              private val mediaPermissions = registerForActivityResult(
-                  ActivityResultContracts.RequestMultiplePermissions()
-              ) { results ->
-                  val request = pendingWebPermission
-                  pendingWebPermission = null
+    private lateinit var webView: WebView
+     private val appUrl = "https://vinyl-recognition-mu-bcnb.bolt.host"
+     private val appHost = "vinyl-recognition-mu-bcnb.bolt.host"
 
-                  if (request != null) {
-                      val granted = request.resources.all { resource ->
-                          when (resource) {
-                              PermissionRequest.RESOURCE_AUDIO_CAPTURE ->
-                                  results[Manifest.permission.RECORD_AUDIO]
-                                      ?: (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
-                              PermissionRequest.RESOURCE_VIDEO_CAPTURE ->
-                                  results[Manifest.permission.CAMERA]
-                                      ?: (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
-                              else -> false
-                          }
-                      }
+    private var pendingWebPermission: PermissionRequest? = null
+    private var fileChooserCallback: ValueCallback<Array<Uri>>? = null
+    private var cameraImageUri: Uri? = null
 
-                      if (granted) request.grant(request.resources)
-                      else request.deny()
-                  }
-              }
+    private val mediaPermissions = registerForActivityResult(        
+    ActivityResultContracts.RequestMultiplePermissions()    ) 
+            { results ->
+              val request = pendingWebPermission
+               pendingWebPermission = null
 
-              @SuppressLint("SetJavaScriptEnabled")
-              override fun onCreate(savedInstanceState: Bundle?) {
-                  super.onCreate(savedInstanceState)
+        if (request != null) {
+            val granted = request.resources.all { resource ->
+                when (resource) {
+                    PermissionRequest.RESOURCE_AUDIO_CAPTURE ->
+                        results[Manifest.permission.RECORD_AUDIO]
+                            ?: (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
 
-                  window.decorView.systemUiVisibility = (
-                      View.SYSTEM_UI_FLAG_FULLSCREEN or
-                      View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-                      View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
-                      View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
-                      View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
-                      View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
-                  )
+                    PermissionRequest.RESOURCE_VIDEO_CAPTURE ->
+                        results[Manifest.permission.CAMERA]
+                            ?: (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
 
-                  webView = WebView(this)
-                  setContentView(webView)
-                  webView.settings.javaScriptEnabled = true
-                  webView.settings.domStorageEnabled = true
-                  webView.settings.mediaPlaybackRequiresUserGesture = false
+                    else -> false
+                }
+            }
 
-                  webView.webViewClient = object : WebViewClient() {
-                      override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
-                          return request.url.scheme != "https" || request.url.host != appHost
-                      }
-                  }
+            if (granted) request.grant(request.resources)
+            else request.deny()
+        }
+    }
 
-                  webView.webChromeClient = object : WebChromeClient() {
-                      override fun onPermissionRequest(request: PermissionRequest) {
-                          runOnUiThread {
-                              if (request.origin.host != appHost || request.origin.scheme != "https") {
-                                  request.deny()
-                                  return@runOnUiThread
-                              }
+    private val fileChooserLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val callback = fileChooserCallback
+        fileChooserCallback = null
 
-                              val permissions = mutableListOf<String>()
+        if (result.resultCode == Activity.RESULT_OK) {
+            val selectedUri = result.data?.data ?: cameraImageUri
+            if (selectedUri != null) callback?.onReceiveValue(arrayOf(selectedUri))
+            else callback?.onReceiveValue(null)
+        } else {
+            callback?.onReceiveValue(null)
+        }
+    }
 
-                              if (PermissionRequest.RESOURCE_AUDIO_CAPTURE in request.resources)
-                                  permissions.add(Manifest.permission.RECORD_AUDIO)
+    @SuppressLint("SetJavaScriptEnabled")
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
 
-                              if (PermissionRequest.RESOURCE_VIDEO_CAPTURE in request.resources)
-                                  permissions.add(Manifest.permission.CAMERA)
+        window.decorView.systemUiVisibility = (
+            View.SYSTEM_UI_FLAG_FULLSCREEN or
+            View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+            View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
+            View.SYSTEM_UI_FLAG_LAYOUT_STABLE or
+            View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
+            View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+        )
 
-                              if (permissions.isEmpty()) {
-                                  request.deny()
-                                  return@runOnUiThread
-                              }
+        webView = WebView(this)
+        setContentView(webView)
 
-                              val missing = permissions.filter {
-                                  ContextCompat.checkSelfPermission(this@MainActivity, it) != PackageManager.PERMISSION_GRANTED
-                              }
+        webView.settings.javaScriptEnabled = true
+        webView.settings.domStorageEnabled = true
+        webView.settings.mediaPlaybackRequiresUserGesture = false
 
-                              if (missing.isEmpty()) {
-                                  request.grant(request.resources)
-                              } else {
-                                  pendingWebPermission = request
-                                  mediaPermissions.launch(missing.toTypedArray())
-                              }
-                          }
-                      }
-                  }
+        webView.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(
+                view: WebView,
+                request: WebResourceRequest
+            ): Boolean {
+                return request.url.scheme != "https" || request.url.host != appHost
+            }
+        }
 
-                  if (savedInstanceState == null) webView.loadUrl(appUrl)
-                  else webView.restoreState(savedInstanceState)
-              }
+        webView.webChromeClient = object : WebChromeClient() {
 
-              override fun onSaveInstanceState(outState: Bundle) {
-                  webView.saveState(outState)
-                  super.onSaveInstanceState(outState)
-              }
+            override fun onPermissionRequest(request: PermissionRequest) {
+                runOnUiThread {
+                    if (request.origin.host != appHost || request.origin.scheme != "https") {
+                        request.deny()
+                        return@runOnUiThread
+                    }
 
-              @Deprecated("Deprecated in Android API")
-              override fun onBackPressed() {
-                  if (::webView.isInitialized && webView.canGoBack()) webView.goBack()
-                  else super.onBackPressed()
-              }
+                    val permissions = mutableListOf<String>()
 
-              override fun onDestroy() {
-                  if (::webView.isInitialized) webView.destroy()
-                  super.onDestroy()
-              }
-          }
+                    if (PermissionRequest.RESOURCE_AUDIO_CAPTURE in request.resources)
+                        permissions.add(Manifest.permission.RECORD_AUDIO)
+
+                    if (PermissionRequest.RESOURCE_VIDEO_CAPTURE in request.resources)
+                        permissions.add(Manifest.permission.CAMERA)
+
+                    if (permissions.isEmpty()) {
+                        request.deny()
+                        return@runOnUiThread
+                    }
+
+                    val missing = permissions.filter {
+                        ContextCompat.checkSelfPermission(this@MainActivity, it) != PackageManager.PERMISSION_GRANTED
+                    }
+
+                    if (missing.isEmpty()) {
+                        request.grant(request.resources)
+                    } else {
+                        pendingWebPermission = request
+                        mediaPermissions.launch(missing.toTypedArray())
+                    }
+                }
+            }
+
+            override fun onShowFileChooser(
+                webView: WebView?,
+                filePathCallback: ValueCallback<Array<Uri>>,
+                fileChooserParams: FileChooserParams
+            ): Boolean {
+                fileChooserCallback?.onReceiveValue(null)
+                fileChooserCallback = filePathCallback
+
+                val galleryIntent = Intent(Intent.ACTION_GET_CONTENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "image/*"
+                }
+
+                val cameraIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+
+                val values = ContentValues().apply {
+                    put(MediaStore.Images.Media.DISPLAY_NAME, "vinyl_photo.jpg")
+                    put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                }
+
+                cameraImageUri = contentResolver.insert(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    values
+                )
+
+                if (cameraImageUri != null) {
+                    cameraIntent.putExtra(MediaStore.EXTRA_OUTPUT, cameraImageUri)
+                }
+
+                val chooser = Intent.createChooser(galleryIntent, "Elegir fotografía")
+
+                if (cameraImageUri != null &&
+                    cameraIntent.resolveActivity(packageManager) != null
+                ) {
+                    chooser.putExtra(
+                        Intent.EXTRA_INITIAL_INTENTS,
+                        arrayOf(cameraIntent)
+                    )
+                }
+
+                fileChooserLauncher.launch(chooser)
+                return true
+            }
+        }
+
+        if (savedInstanceState == null) webView.loadUrl(appUrl)
+        else webView.restoreState(savedInstanceState)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        webView.saveState(outState)
+        super.onSaveInstanceState(outState)
+    }
+
+    @Deprecated("Deprecated in Android API")
+    override fun onBackPressed() {
+        if (::webView.isInitialized && webView.canGoBack()) webView.goBack()
+        else super.onBackPressed()
+    }
+
+    override fun onDestroy() {
+        fileChooserCallback?.onReceiveValue(null)
+        fileChooserCallback = null
+
+        if (::webView.isInitialized) webView.destroy()
+        super.onDestroy()
+    }
+}
+
           '''
 
           activity.write_text(kotlin)
